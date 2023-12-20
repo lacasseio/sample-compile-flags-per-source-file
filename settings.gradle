@@ -1,0 +1,6 @@
+pluginManagement {
+    includeBuild 'compile-flags-per-source-file-plugin'
+}
+
+rootProject.name = 'sample-compile-flags-per-source-file'
+include('app')

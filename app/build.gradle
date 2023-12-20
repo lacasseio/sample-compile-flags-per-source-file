@@ -1,0 +1,18 @@
+plugins {
+    // Apply the cpp-application plugin to add support for building C++ executables
+    id 'cpp-application'
+    id 'com.example.compile-flags-per-source-file'
+
+    // Apply the cpp-unit-test plugin to add support for building and running C++ test executables
+    id 'cpp-unit-test'
+}
+
+// Set the target operating system and architecture for this application
+application {
+    targetMachines.add(machines.macOS.x86_64)
+    compileFlags {
+        forSource { it.name == 'file1.cpp' }.add('-DMACRO_FILE1=1')
+        forSource { it.name == 'file2.cpp' }.add('-DMACRO_FILE2=1')
+        forSource { it.name == 'file3.cpp' }.add('-DMACRO_FILE3=1')
+    }
+}
