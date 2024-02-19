@@ -2,11 +2,10 @@ import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Transformer;
-import org.gradle.api.file.Directory;
-import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.plugins.ExtensionAware;
+import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.util.PatternFilterable;
@@ -26,22 +25,23 @@ import java.util.stream.Collectors;
 public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugin<Project> {
     @Override
     public void apply(Project project) {
-        project.getComponents().withType(CppComponent.class).configureEach(new Action<CppComponent>() {
+        project.getComponents().withType(CppComponent.class).configureEach(new Action<>() {
             private FileCollection cppSource(CppComponent component) {
-                final String defaultLocation = String.format("src/%s/cpp", component.getName());
                 return project.getObjects().fileCollection().from((Callable<?>) () -> {
-                    if (component.getSource().isEmpty()) {
-                        return defaultLocation;
-                    } else {
-                        return component.getSource();
+                    // Check if the property was overridden
+                    final ExtraPropertiesExtension extraProperties = ((ExtensionAware) component).getExtensions().getExtraProperties();
+                    Object result = extraProperties.get("cppSource");
+                    if (result == null) {
+                        result = component.getCppSource();
                     }
+                    return result;
                 });
             }
 
             @Override
             public void execute(CppComponent component) {
-                // We have to re-map `CppComponent#getCppSource()` because
-                //   the core plugins filters the default location for: *.cpp, *.c++, *.cc
+                // We support shadowing the `CppComponent#cppSource` property to fix the core patterns.
+                //   The core plugins filters the default location for: *.cpp, *.c++, *.cc
                 final DefaultCompileFlagsExtension extension = ((ExtensionAware) component).getExtensions().create("compileFlags", DefaultCompileFlagsExtension.class, cppSource(component));
 
                 component.getBinaries().configureEach(binary -> {
@@ -124,10 +124,6 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
 
     private static <T> Transformer<Provider<Set<FileSystemLocation>>, T> elementsOf(Transformer<? extends FileCollection, ? super T> mapper) {
         return it -> mapper.transform(it).getElements();
-    }
-
-    private static <T> Transformer<Provider<Directory>, T> locationOnly(Transformer<? extends DirectoryProperty, ? super T> mapper) {
-        return it -> mapper.transform(it).getLocationOnly();
     }
 
     //region Names
