@@ -1,3 +1,11 @@
+package com.xilinx.infra.cpp.plugins;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
@@ -5,7 +13,6 @@ import org.gradle.api.Transformer;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.plugins.ExtensionAware;
-import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.util.PatternFilterable;
@@ -16,32 +23,21 @@ import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
+import com.xilinx.infra.cpp.model.DefaultCompileFlagsExtension;
 
 public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugin<Project> {
     @Override
     public void apply(Project project) {
         project.getComponents().withType(CppComponent.class).configureEach(new Action<>() {
+            // The core plugins filters the default location for: *.cpp, *.c++, *.cc, override that to include *.cxx as well
             private FileCollection cppSource(CppComponent component) {
                 return project.getObjects().fileCollection().from((Callable<?>) () -> {
-                    // Check if the property was overridden
-                    final ExtraPropertiesExtension extraProperties = ((ExtensionAware) component).getExtensions().getExtraProperties();
-                    Object result = extraProperties.get("cppSource");
-                    if (result == null) {
-                        result = component.getCppSource();
-                    }
-                    return result;
+                    return component.getSource().getAsFileTree().matching(it -> it.include("**/*.cpp", "**/*.c++", "**/*.cc", "**/*.cxx"));
                 });
             }
 
             @Override
             public void execute(CppComponent component) {
-                // We support shadowing the `CppComponent#cppSource` property to fix the core patterns.
-                //   The core plugins filters the default location for: *.cpp, *.c++, *.cc
                 final DefaultCompileFlagsExtension extension = ((ExtensionAware) component).getExtensions().create("compileFlags", DefaultCompileFlagsExtension.class, cppSource(component));
 
                 component.getBinaries().configureEach(binary -> {
@@ -56,10 +52,18 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                         @Override
                         public void execute(DefaultCompileFlagsExtension.CompileFlagsEntry entry) {
                             final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getIdentifier()), CppCompile.class);
-
+                            sourceCompileTask.configure(task -> {
+                                task.doFirst(it -> {
+                                    System.out.println(entry.getCppSource().getFiles());
+                                });
+                            });
                             sourceCompileTask.configure(copyFrom(compileTask));
                             sourceCompileTask.configure(task -> {
-                                task.getCompilerArgs().addAll(entry.getAdditionalCompileFlags());
+                                if (System.getProperty("os.name").toLowerCase().contains("linux")) {
+                                    task.getCompilerArgs().addAll(entry.getAdditionalLinuxCompileFlags());
+                                } else {
+                                    task.getCompilerArgs().addAll(entry.getAdditionalWindowsCompileFlags());
+                                }
                                 task.getCompilerArgs().disallowChanges();
                                 task.getSource().from(entry.getCppSource()).disallowChanges();
 
