@@ -1,6 +1,7 @@
 import org.gradle.api.DomainObjectSet;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Provider;
@@ -19,17 +20,23 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     @Inject
     public DefaultCompileFlagsExtension(ObjectFactory objects, FileCollection source) {
         this.objects = objects;
-        this.defaultSources = source.getAsFileTree();
+        this.defaultSources = memoize(source).getAsFileTree();
         getCppSource().from((Callable<?>) () -> defaultSources);
+    }
+
+    private FileCollection memoize(FileCollection s) {
+        SetProperty<FileSystemLocation> result = objects.setProperty(FileSystemLocation.class);
+        result.value(s.getElements()).finalizeValueOnRead();
+        return objects.fileCollection().from(result);
     }
 
     public abstract ConfigurableFileCollection getCppSource();
 
     public CompileFlags forSource(Spec<? super File> filterAction) {
         final CompileFlagsEntry entry = objects.newInstance(CompileFlagsEntry.class, "sources" + nextEntry++);
-        final FileCollection cppSource = defaultSources.filter(filterAction);
+        final FileCollection cppSource = memoize(defaultSources.filter(filterAction));
         entry.getCppSource().from(cppSource);
-        this.defaultSources = defaultSources.minus(cppSource).getAsFileTree();
+        this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
         getSourceCompileFlags().add(entry);
         return entry.dsl;
     }
