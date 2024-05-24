@@ -30,7 +30,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                 return project.getObjects().fileCollection().from((Callable<?>) () -> {
                     // Check if the property was overridden
                     final ExtraPropertiesExtension extraProperties = ((ExtensionAware) component).getExtensions().getExtraProperties();
-                    Object result = extraProperties.get("cppSource");
+                    Object result = extraProperties.getProperties().get("cppSource");
                     if (result == null) {
                         result = component.getCppSource();
                     }
