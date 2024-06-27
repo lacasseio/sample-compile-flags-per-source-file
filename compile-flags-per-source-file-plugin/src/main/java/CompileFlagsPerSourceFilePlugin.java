@@ -27,15 +27,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
     public void apply(Project project) {
         project.getComponents().withType(CppComponent.class).configureEach(new Action<>() {
             private FileCollection cppSource(CppComponent component) {
-                return project.getObjects().fileCollection().from((Callable<?>) () -> {
-                    // Check if the property was overridden
-                    final ExtraPropertiesExtension extraProperties = ((ExtensionAware) component).getExtensions().getExtraProperties();
-                    Object result = extraProperties.getProperties().get("cppSource");
-                    if (result == null) {
-                        result = component.getCppSource();
-                    }
-                    return result;
-                });
+                return project.getObjects().fileCollection().from((Callable<?>) () -> cppSourceOf(component));
             }
 
             @Override
@@ -120,6 +112,19 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                 });
             }
         });
+    }
+
+    private static FileCollection cppSourceOf(CppComponent component) {
+        FileCollection result = null;
+        if (component instanceof ExtensionAware) {
+            result = (FileCollection) ((ExtensionAware) component).getExtensions().getExtraProperties().getProperties().get("cppSource");
+        }
+
+        if (result == null) {
+            result = component.getCppSource();
+        }
+
+        return result;
     }
 
     private static <T> Transformer<Provider<Set<FileSystemLocation>>, T> elementsOf(Transformer<? extends FileCollection, ? super T> mapper) {
