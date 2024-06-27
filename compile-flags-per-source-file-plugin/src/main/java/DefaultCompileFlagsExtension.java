@@ -1,5 +1,6 @@
 import org.gradle.api.Action;
 import org.gradle.api.DomainObjectSet;
+import org.gradle.api.Named;
 import org.gradle.api.Transformer;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
@@ -7,6 +8,7 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.specs.Spec;
@@ -26,13 +28,19 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     private int nextEntry = 0;
     private final ObjectFactory objects;
     private FileTree defaultSources;
-    private final Map<String, CompileFlagsForSingleFileEntry> entries = new HashMap<>();
+    private final Map<String, SingleSourceFileBucket> entries = new HashMap<>();
+    public DomainObjectSet<SourceFilterSpec> sourceSpecs;
 
     @Inject
     public DefaultCompileFlagsExtension(ObjectFactory objects, FileCollection source) {
         this.objects = objects;
         this.defaultSources = memoize(source).getAsFileTree();
+        this.sourceSpecs = objects.domainObjectSet(SourceFilterSpec.class);
         getCppSource().from((Callable<?>) () -> defaultSources);
+
+        getSourceCompileFlags().all(bucket -> {
+            bucket.getIdentifier().value("sources" + nextEntry++).disallowChanges();
+        });
     }
 
     private FileCollection memoize(FileCollection s) {
@@ -45,10 +53,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
     public CompileFlags forSource(Spec<? super File> filterAction) {
         SourceFilterSpec specEntry = objects.newInstance(SourceFilterSpec.class, filterAction);
-        getSpecs().add(specEntry);
-        getSourceCompileFlags().withType(CompileFlagsForSingleFileEntry.class).all(new Action<CompileFlagsForSingleFileEntry>() {
+        sourceSpecs.add(specEntry);
+
+        // Add additional compile flags to matching single source bucket
+        getSourceCompileFlags().withType(SingleSourceFileBucket.class).all(new Action<>() {
             @Override
-            public void execute(CompileFlagsForSingleFileEntry entry) {
+            public void execute(SingleSourceFileBucket entry) {
                 entry.getAdditionalCompileFlags().addAll(entry.getCppSourceFile()
                         .map(asFile())
                         .map(filter(negate(specEntry.filterAction)))
@@ -84,10 +94,10 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public CompileFlags forSource(String fileName) {
-        final CompileFlagsForSingleFileEntry entry = entries.computeIfAbsent(fileName, new Function<String, CompileFlagsForSingleFileEntry>() {
+        final SingleSourceFileBucket entry = entries.computeIfAbsent(fileName, new Function<String, SingleSourceFileBucket>() {
             @Override
-            public CompileFlagsForSingleFileEntry apply(String __) {
-                final CompileFlagsForSingleFileEntry result = objects.newInstance(CompileFlagsForSingleFileEntry.class, "sources" + nextEntry++);
+            public SingleSourceFileBucket apply(String __) {
+                final SingleSourceFileBucket result = objects.newInstance(SingleSourceFileBucket.class);
                 final FileCollection cppSource = DefaultCompileFlagsExtension.this.memoize(defaultSources.filter(byName(fileName)));
                 result.getCppSourceFile().fileProvider(singleFile(cppSource));
                 DefaultCompileFlagsExtension.this.defaultSources = DefaultCompileFlagsExtension.this.memoize(defaultSources.minus(cppSource)).getAsFileTree();
@@ -115,8 +125,8 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public void finalizeExtension() {
-        getSpecs().all(spec -> {
-            final CompileFlagsForSpecEntry result = objects.newInstance(CompileFlagsForSpecEntry.class, "sources" + nextEntry++);
+        sourceSpecs.all(spec -> {
+            final SourceSpecBucket result = objects.newInstance(SourceSpecBucket.class );
             final FileCollection cppSource = memoize(defaultSources.filter(spec.filterAction));
             result.getCppSourceFiles().from(cppSource);
             this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
@@ -125,8 +135,6 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public abstract DomainObjectSet<CompileFlagsBucket> getSourceCompileFlags();
-
-    public abstract DomainObjectSet<SourceFilterSpec> getSpecs();
 
     public static class DefaultCompileFlags implements CompileFlags {
         private final SetProperty<String> additionalCompileFlags;
@@ -171,26 +179,19 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         }
     }
 
-    public interface CompileFlagsBucket {
-        String getIdentifier();
+    public interface CompileFlagsBucket extends Named {
+        default String getName() {
+            return getIdentifier().get();
+        }
+
+        Property<String> getIdentifier();
         Object getCppSource();
 
         @Nested
         DefaultCompileFlags getAdditionalCompileFlags();
     }
 
-    public static abstract class CompileFlagsForSingleFileEntry implements CompileFlagsBucket {
-        private final String identifier;
-
-        @Inject
-        public CompileFlagsForSingleFileEntry(String identifier) {
-            this.identifier = identifier;
-        }
-
-        public String getIdentifier() {
-            return identifier;
-        }
-
+    public static abstract class SingleSourceFileBucket implements CompileFlagsBucket {
         public abstract RegularFileProperty getCppSourceFile();
 
         @Override
@@ -199,18 +200,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         }
     }
 
-    public static abstract class CompileFlagsForSpecEntry implements CompileFlagsBucket {
-        private final String identifier;
-
-        @Inject
-        public CompileFlagsForSpecEntry(String identifier) {
-            this.identifier = identifier;
-        }
-
-        public String getIdentifier() {
-            return identifier;
-        }
-
+    public static abstract class SourceSpecBucket implements CompileFlagsBucket {
         public abstract ConfigurableFileCollection getCppSourceFiles();
 
         @Override

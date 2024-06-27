@@ -49,7 +49,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                     extension.getSourceCompileFlags().all(new Action<>() {
                         @Override
                         public void execute(DefaultCompileFlagsExtension.CompileFlagsBucket entry) {
-                            final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getIdentifier()), CppCompile.class);
+                            final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getName()), CppCompile.class);
 
                             sourceCompileTask.configure(copyFrom(compileTask));
                             sourceCompileTask.configure(task -> {
