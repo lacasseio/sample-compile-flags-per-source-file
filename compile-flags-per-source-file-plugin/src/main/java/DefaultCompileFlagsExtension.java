@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.function.Function;
 
 abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     private int nextEntry = 0;
@@ -55,21 +56,21 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                         .orElse(specEntry.getAdditionalCompileFlags().toProvider()));
             }
 
-            private Transformer<File, FileSystemLocation> asFile() {
+            private /*static*/ Transformer<File, FileSystemLocation> asFile() {
                 return FileSystemLocation::getAsFile;
             }
 
             // Adapt Predicate#negate() to Gradle Spec
-            private <T> Spec<T> negate(Spec<? super T> spec) {
+            private /*static*/ <T> Spec<T> negate(Spec<? super T> spec) {
                 return it -> !spec.isSatisfiedBy(it);
             }
 
-            private <OUT, IN> Transformer<OUT, IN> toConstant(OUT value) {
+            private /*static*/ <OUT, IN> Transformer<OUT, IN> toConstant(OUT value) {
                 return __ -> value;
             }
 
             // Backport of Provider#filter(Spec)
-            private <T> Transformer<T, T> filter(Spec<? super T> spec) {
+            private /*static*/ <T> Transformer<T, T> filter(Spec<? super T> spec) {
                 return it -> {
                     if (spec.isSatisfiedBy(it)) {
                         return it;
@@ -83,31 +84,34 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public CompileFlags forSource(String fileName) {
-        final CompileFlagsForSingleFileEntry entry = entries.computeIfAbsent(fileName, __ -> {
-            final CompileFlagsForSingleFileEntry result = objects.newInstance(CompileFlagsForSingleFileEntry.class, "sources" + nextEntry++);
-            final FileCollection cppSource = memoize(defaultSources.filter(byName(fileName)));
-            result.getCppSourceFile().fileProvider(singleFile(cppSource));
-            this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
-            getSourceCompileFlags().add(result);
-            return result;
+        final CompileFlagsForSingleFileEntry entry = entries.computeIfAbsent(fileName, new Function<String, CompileFlagsForSingleFileEntry>() {
+            @Override
+            public CompileFlagsForSingleFileEntry apply(String __) {
+                final CompileFlagsForSingleFileEntry result = objects.newInstance(CompileFlagsForSingleFileEntry.class, "sources" + nextEntry++);
+                final FileCollection cppSource = DefaultCompileFlagsExtension.this.memoize(defaultSources.filter(byName(fileName)));
+                result.getCppSourceFile().fileProvider(singleFile(cppSource));
+                DefaultCompileFlagsExtension.this.defaultSources = DefaultCompileFlagsExtension.this.memoize(defaultSources.minus(cppSource)).getAsFileTree();
+                DefaultCompileFlagsExtension.this.getSourceCompileFlags().add(result);
+                return result;
+            }
+
+            private /*static*/ Provider<File> singleFile(FileCollection target) {
+                return target.getElements().map(it -> {
+                    final Iterator<FileSystemLocation> iter = it.iterator();
+                    if (!iter.hasNext()) {
+                        return null;
+                    }
+                    final File sourceFile = iter.next().getAsFile();
+                    assert !iter.hasNext() : "expect only one file match";
+                    return sourceFile;
+                });
+            }
+
+            private /*static*/ Spec<File> byName(String fileName) {
+                return it -> it.getName().equals(fileName);
+            }
         });
         return entry.getAdditionalCompileFlags();
-    }
-
-    private static Provider<File> singleFile(FileCollection target) {
-        return target.getElements().map(it -> {
-            final Iterator<FileSystemLocation> iter = it.iterator();
-            if (!iter.hasNext()) {
-                return null;
-            }
-            final File sourceFile = iter.next().getAsFile();
-            assert !iter.hasNext() : "expect only one file match";
-            return sourceFile;
-        });
-    }
-
-    private static Spec<File> byName(String fileName) {
-        return it -> it.getName().equals(fileName);
     }
 
     public void finalizeExtension() {
@@ -170,15 +174,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     public interface CompileFlagsBucket {
         String getIdentifier();
         Object getCppSource();
+
+        @Nested
         DefaultCompileFlags getAdditionalCompileFlags();
     }
 
-    private static abstract class AbstractCompileFlagsEntry {
-        @Nested
-        public abstract DefaultCompileFlags getAdditionalCompileFlags();
-    }
-
-    public static abstract class CompileFlagsForSingleFileEntry extends AbstractCompileFlagsEntry implements CompileFlagsBucket {
+    public static abstract class CompileFlagsForSingleFileEntry implements CompileFlagsBucket {
         private final String identifier;
 
         @Inject
@@ -198,7 +199,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         }
     }
 
-    public static abstract class CompileFlagsForSpecEntry extends AbstractCompileFlagsEntry implements CompileFlagsBucket {
+    public static abstract class CompileFlagsForSpecEntry implements CompileFlagsBucket {
         private final String identifier;
 
         @Inject
@@ -218,12 +219,15 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         }
     }
 
-    public static abstract class SourceFilterSpec extends AbstractCompileFlagsEntry {
+    public static abstract class SourceFilterSpec {
         private final Spec<? super File> filterAction;
 
         @Inject
         public SourceFilterSpec(Spec<? super File> filterAction) {
             this.filterAction = filterAction;
         }
+
+        @Nested
+        public abstract DefaultCompileFlags getAdditionalCompileFlags();
     }
 }
