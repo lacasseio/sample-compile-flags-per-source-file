@@ -1,4 +1,6 @@
+import org.gradle.api.Action;
 import org.gradle.api.DomainObjectSet;
+import org.gradle.api.Transformer;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
@@ -42,14 +44,39 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     public CompileFlags forSource(Spec<? super File> filterAction) {
         SourceFilterSpec specEntry = objects.newInstance(SourceFilterSpec.class, filterAction);
         getSpecs().add(specEntry);
-        getSourceCompileFlags().withType(CompileFlagsForSingleFileEntry.class).all(entry -> {
-            entry.getAdditionalCompileFlags().addAll(entry.getCppSourceFile().map(it -> {
-                if (filterAction.isSatisfiedBy(it.getAsFile())) {
-                    return null; // use orElse to enforce conditional implicit task dependencies
-                } else {
-                    return Collections.<String>emptySet();
-                }
-            }).orElse(specEntry.getAdditionalCompileFlags()));
+        getSourceCompileFlags().withType(CompileFlagsForSingleFileEntry.class).all(new Action<CompileFlagsForSingleFileEntry>() {
+            @Override
+            public void execute(CompileFlagsForSingleFileEntry entry) {
+                entry.getAdditionalCompileFlags().addAll(entry.getCppSourceFile()
+                        .map(asFile())
+                        .map(filter(negate(specEntry.filterAction)))
+                        .map(toConstant(Collections.<String>emptySet()))
+                        .orElse(specEntry.getAdditionalCompileFlags()));
+            }
+
+            private Transformer<File, FileSystemLocation> asFile() {
+                return FileSystemLocation::getAsFile;
+            }
+
+            // Adapt Predicate#negate() to Gradle Spec
+            private <T> Spec<T> negate(Spec<? super T> spec) {
+                return it -> !spec.isSatisfiedBy(it);
+            }
+
+            private <OUT, IN> Transformer<OUT, IN> toConstant(OUT value) {
+                return __ -> value;
+            }
+
+            // Backport of Provider#filter(Spec)
+            private <T> Transformer<T, T> filter(Spec<? super T> spec) {
+                return it -> {
+                    if (spec.isSatisfiedBy(it)) {
+                        return it;
+                    } else {
+                        return null;
+                    }
+                };
+            }
         });
         return specEntry.dsl;
     }
@@ -58,23 +85,24 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         final CompileFlagsForSingleFileEntry entry = entries.computeIfAbsent(fileName, __ -> {
             final CompileFlagsForSingleFileEntry result = objects.newInstance(CompileFlagsForSingleFileEntry.class, "sources" + nextEntry++);
             final FileCollection cppSource = memoize(defaultSources.filter(byName(fileName)));
-
-            final Provider<File> cppSourceFile = cppSource.getElements().map(it -> {
-                final Iterator<FileSystemLocation> iter = it.iterator();
-                if (!iter.hasNext()) {
-                    return null;
-                }
-                final File sourceFile = iter.next().getAsFile();
-                assert !iter.hasNext() : "expect only one file match";
-                return sourceFile;
-            });
-            result.getCppSourceFile().fileProvider(cppSourceFile);
+            result.getCppSourceFile().fileProvider(singleFile(cppSource));
             this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
             getSourceCompileFlags().add(result);
             return result;
         });
-
         return entry.dsl;
+    }
+
+    private static Provider<File> singleFile(FileCollection target) {
+        return target.getElements().map(it -> {
+            final Iterator<FileSystemLocation> iter = it.iterator();
+            if (!iter.hasNext()) {
+                return null;
+            }
+            final File sourceFile = iter.next().getAsFile();
+            assert !iter.hasNext() : "expect only one file match";
+            return sourceFile;
+        });
     }
 
     private static Spec<File> byName(String fileName) {
@@ -84,7 +112,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     public void finalizeExtension() {
         getSpecs().all(spec -> {
             final CompileFlagsForSpecEntry result = objects.newInstance(CompileFlagsForSpecEntry.class, "sources" + nextEntry++);
-            final FileCollection cppSource = memoize(defaultSources.filter(spec.spec));
+            final FileCollection cppSource = memoize(defaultSources.filter(spec.filterAction));
             result.getCppSourceFiles().from(cppSource);
             this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
             getSourceCompileFlags().add(result);
@@ -184,11 +212,11 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public static abstract class SourceFilterSpec extends AbstractCompileFlagsEntry {
-        private final Spec<? super File> spec;
+        private final Spec<? super File> filterAction;
 
         @Inject
-        public SourceFilterSpec(Spec<? super File> spec) {
-            this.spec = spec;
+        public SourceFilterSpec(Spec<? super File> filterAction) {
+            this.filterAction = filterAction;
         }
     }
 }
