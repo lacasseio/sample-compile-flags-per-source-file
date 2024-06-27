@@ -5,6 +5,7 @@ import java.io.File;
 
 public interface CompileFlagsExtension {
     CompileFlags forSource(Spec<? super File> filterAction);
+    CompileFlags forSource(String fileName);
 
     interface CompileFlags {
         CompileFlags add(String item);

@@ -36,6 +36,8 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                 //   The core plugins filters the default location for: *.cpp, *.c++, *.cc
                 final DefaultCompileFlagsExtension extension = ((ExtensionAware) component).getExtensions().create("compileFlags", DefaultCompileFlagsExtension.class, cppSource(component));
 
+                project.afterEvaluate(__ -> extension.finalizeExtension());
+
                 component.getBinaries().configureEach(binary -> {
                     final TaskProvider<CppCompile> compileTask = project.getTasks().named(compileTaskName(binary), CppCompile.class);
                     compileTask.configure(task -> {
@@ -46,7 +48,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                     });
                     extension.getSourceCompileFlags().all(new Action<>() {
                         @Override
-                        public void execute(DefaultCompileFlagsExtension.CompileFlagsEntry entry) {
+                        public void execute(DefaultCompileFlagsExtension.CompileFlagsBucket entry) {
                             final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getIdentifier()), CppCompile.class);
 
                             sourceCompileTask.configure(copyFrom(compileTask));
