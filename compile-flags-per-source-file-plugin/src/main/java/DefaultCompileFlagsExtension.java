@@ -15,8 +15,8 @@ import org.gradle.api.tasks.Nested;
 import javax.inject.Inject;
 import java.io.File;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -26,7 +26,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     private int nextEntry = 0;
     private final ObjectFactory objects;
     private FileTree defaultSources;
-    private final Map<String, CompileFlagsForSingleFileEntry> entries = new LinkedHashMap<>();
+    private final Map<String, CompileFlagsForSingleFileEntry> entries = new HashMap<>();
 
     @Inject
     public DefaultCompileFlagsExtension(ObjectFactory objects, FileCollection source) {
@@ -36,9 +36,9 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     private FileCollection memoize(FileCollection s) {
-        SetProperty<FileSystemLocation> result = objects.setProperty(FileSystemLocation.class);
-        result.value(s.getElements()).finalizeValueOnRead();
-        return objects.fileCollection().from(result);
+        ConfigurableFileCollection result = objects.fileCollection().from(s);
+        result.finalizeValueOnRead();
+        return result;
     }
 
     public abstract ConfigurableFileCollection getCppSource();
