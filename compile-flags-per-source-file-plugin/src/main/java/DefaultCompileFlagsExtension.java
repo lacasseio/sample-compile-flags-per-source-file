@@ -65,7 +65,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                     return null;
                 }
                 final File sourceFile = iter.next().getAsFile();
-                assert !iter.hasNext();
+                assert !iter.hasNext() : "expect only one file match";
                 return sourceFile;
             });
             result.getCppSourceFile().fileProvider(cppSourceFile);
