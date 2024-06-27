@@ -10,6 +10,7 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.specs.Spec;
+import org.gradle.api.tasks.Nested;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -51,7 +52,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                         .map(asFile())
                         .map(filter(negate(specEntry.filterAction)))
                         .map(toConstant(Collections.<String>emptySet()))
-                        .orElse(specEntry.getAdditionalCompileFlags()));
+                        .orElse(specEntry.getAdditionalCompileFlags().toProvider()));
             }
 
             private Transformer<File, FileSystemLocation> asFile() {
@@ -78,7 +79,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                 };
             }
         });
-        return specEntry.dsl;
+        return specEntry.getAdditionalCompileFlags();
     }
 
     public CompileFlags forSource(String fileName) {
@@ -90,7 +91,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
             getSourceCompileFlags().add(result);
             return result;
         });
-        return entry.dsl;
+        return entry.getAdditionalCompileFlags();
     }
 
     private static Provider<File> singleFile(FileCollection target) {
@@ -123,52 +124,58 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
     public abstract DomainObjectSet<SourceFilterSpec> getSpecs();
 
+    public static class DefaultCompileFlags implements CompileFlags {
+        private final SetProperty<String> additionalCompileFlags;
+
+        @Inject
+        public DefaultCompileFlags(ObjectFactory objects) {
+            this.additionalCompileFlags = objects.setProperty(String.class);
+        }
+
+        public Provider<Set<String>> toProvider() {
+            return additionalCompileFlags;
+        }
+
+        @Override
+        public CompileFlags add(String item) {
+            additionalCompileFlags.add(item);
+            return this;
+        }
+
+        @Override
+        public CompileFlags add(Provider<? extends String> item) {
+            additionalCompileFlags.add(item);
+            return this;
+        }
+
+        @Override
+        public CompileFlags addAll(String... items) {
+            additionalCompileFlags.addAll(items);
+            return this;
+        }
+
+        @Override
+        public CompileFlags addAll(Iterable<? extends String> items) {
+            additionalCompileFlags.addAll(items);
+            return this;
+        }
+
+        @Override
+        public CompileFlags addAll(Provider<? extends Iterable<? extends String>> items) {
+            additionalCompileFlags.addAll(items);
+            return this;
+        }
+    }
+
     public interface CompileFlagsBucket {
         String getIdentifier();
         Object getCppSource();
-        Provider<Set<String>> getAdditionalCompileFlags();
+        DefaultCompileFlags getAdditionalCompileFlags();
     }
 
     private static abstract class AbstractCompileFlagsEntry {
-        final CompileFlags dsl;
-
-        public AbstractCompileFlagsEntry() {
-            this.dsl = new DefaultCompileFlags();
-        }
-
-        public abstract SetProperty<String> getAdditionalCompileFlags();
-
-        private class DefaultCompileFlags implements CompileFlags {
-            @Override
-            public CompileFlags add(String item) {
-                getAdditionalCompileFlags().add(item);
-                return this;
-            }
-
-            @Override
-            public CompileFlags add(Provider<? extends String> item) {
-                getAdditionalCompileFlags().add(item);
-                return this;
-            }
-
-            @Override
-            public CompileFlags addAll(String... items) {
-                getAdditionalCompileFlags().addAll(items);
-                return this;
-            }
-
-            @Override
-            public CompileFlags addAll(Iterable<? extends String> items) {
-                getAdditionalCompileFlags().addAll(items);
-                return this;
-            }
-
-            @Override
-            public CompileFlags addAll(Provider<? extends Iterable<? extends String>> items) {
-                getAdditionalCompileFlags().addAll(items);
-                return this;
-            }
-        }
+        @Nested
+        public abstract DefaultCompileFlags getAdditionalCompileFlags();
     }
 
     public static abstract class CompileFlagsForSingleFileEntry extends AbstractCompileFlagsEntry implements CompileFlagsBucket {

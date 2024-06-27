@@ -53,7 +53,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
 
                             sourceCompileTask.configure(copyFrom(compileTask));
                             sourceCompileTask.configure(task -> {
-                                task.getCompilerArgs().addAll(entry.getAdditionalCompileFlags());
+                                task.getCompilerArgs().addAll(entry.getAdditionalCompileFlags().toProvider());
                                 task.getCompilerArgs().disallowChanges();
                                 task.getSource().from(entry.getCppSource()).disallowChanges();
 
