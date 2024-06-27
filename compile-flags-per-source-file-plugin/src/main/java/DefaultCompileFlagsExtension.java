@@ -196,7 +196,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
         @Override
         public Object getCppSource() {
-            return getCppSourceFile();
+            return getCppSourceFile().map(Collections::singletonList).orElse(Collections.emptyList());
         }
     }
 
