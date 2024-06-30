@@ -8,11 +8,14 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.file.FileTree;
 import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.provider.SetProperty;
 import org.gradle.api.specs.Spec;
 import org.gradle.api.tasks.Nested;
+import org.gradle.nativeplatform.platform.NativePlatform;
+import org.gradle.nativeplatform.toolchain.NativeToolChain;
 
 import javax.inject.Inject;
 import java.io.File;
@@ -182,9 +185,13 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         }
 
         @Override
-        public CompileFlags addAll(Transformer<? extends Provider<? extends Iterable<? extends String>>, ? super CompileInformation> mapper) {
-            additionalCompileFlags.addAll(compileInformation.flatMap(mapper).orElse(Collections.emptyList()));
-            return this;
+        public Provider<NativeToolChain> getToolChain() {
+            return compileInformation.flatMap(CompileInformation::getToolChain);
+        }
+
+        @Override
+        public Provider<NativePlatform> getTargetPlatform() {
+            return compileInformation.flatMap(CompileInformation::getTargetPlatform);
         }
     }
 

@@ -1,4 +1,3 @@
-import org.gradle.api.Transformer;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.specs.Spec;
 import org.gradle.nativeplatform.platform.NativePlatform;
@@ -15,7 +14,7 @@ public interface CompileFlagsExtension {
         Provider<NativePlatform> getTargetPlatform();
     }
 
-    interface CompileFlags {
+    interface CompileFlags extends CompileInformation {
         CompileFlags add(String item);
 
         CompileFlags add(Provider<? extends String> item);
@@ -25,7 +24,5 @@ public interface CompileFlagsExtension {
         CompileFlags addAll(Iterable<? extends String> items);
 
         CompileFlags addAll(Provider<? extends Iterable<? extends String>> items);
-
-        CompileFlags addAll(Transformer<? extends Provider<? extends Iterable<? extends String>>, ? super CompileInformation> mapper);
     }
 }
