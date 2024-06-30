@@ -40,6 +40,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
         getSourceCompileFlags().all(bucket -> {
             bucket.getIdentifier().value("sources" + nextEntry++).disallowChanges();
+            bucket.getAdditionalCompileFlags().compileInformation.set(bucket.getCompilationInformation());
         });
     }
 
@@ -134,10 +135,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
     public static class DefaultCompileFlags implements CompileFlags {
         private final SetProperty<String> additionalCompileFlags;
+        private final Property<CompileInformation> compileInformation;
 
         @Inject
         public DefaultCompileFlags(ObjectFactory objects) {
             this.additionalCompileFlags = objects.setProperty(String.class);
+            this.compileInformation = objects.property(CompileInformation.class);
         }
 
         public Provider<Set<String>> toProvider() {
@@ -173,6 +176,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
             additionalCompileFlags.addAll(items);
             return this;
         }
+
+        @Override
+        public CompileFlags addAll(Transformer<? extends Provider<? extends Iterable<? extends String>>, ? super CompileInformation> mapper) {
+            additionalCompileFlags.addAll(compileInformation.flatMap(mapper).orElse(Collections.emptyList()));
+            return this;
+        }
     }
 
     public interface CompileFlagsBucket extends Named {
@@ -182,6 +191,8 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
 
         Property<String> getIdentifier();
         Object getCppSource();
+
+        Property<CompileInformation> getCompilationInformation();
 
         @Nested
         DefaultCompileFlags getAdditionalCompileFlags();

@@ -11,6 +11,8 @@ import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.language.cpp.CppBinary;
 import org.gradle.language.cpp.CppComponent;
 import org.gradle.language.cpp.tasks.CppCompile;
+import org.gradle.language.nativeplatform.tasks.AbstractNativeCompileTask;
+import org.gradle.nativeplatform.platform.NativePlatform;
 import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
@@ -49,6 +51,17 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                         @Override
                         public void execute(DefaultCompileFlagsExtension.CompileFlagsBucket entry) {
                             final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getName()), CppCompile.class);
+                            entry.getCompilationInformation().set(new CompileFlagsExtension.CompileInformation() {
+                                @Override
+                                public Provider<NativeToolChain> getToolChain() {
+                                    return sourceCompileTask.flatMap(AbstractNativeCompileTask::getToolChain);
+                                }
+
+                                @Override
+                                public Provider<NativePlatform> getTargetPlatform() {
+                                    return sourceCompileTask.flatMap(AbstractNativeCompileTask::getTargetPlatform);
+                                }
+                            });
 
                             sourceCompileTask.configure(copyFrom(compileTask));
                             sourceCompileTask.configure(task -> {
