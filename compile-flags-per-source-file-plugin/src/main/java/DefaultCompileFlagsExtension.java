@@ -28,7 +28,7 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     private int nextEntry = 0;
     private final ObjectFactory objects;
     private FileTree defaultSources;
-    private final Map<String, SingleSourceFileBucket> entries = new HashMap<>();
+    private final Map<File, SingleSourceFileBucket> entries = new HashMap<>();
     public DomainObjectSet<SourceFilterSpec> sourceSpecs;
 
     @Inject
@@ -93,12 +93,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         return specEntry.getAdditionalCompileFlags();
     }
 
-    public CompileFlags forSource(String fileName) {
-        final SingleSourceFileBucket entry = entries.computeIfAbsent(fileName, new Function<String, SingleSourceFileBucket>() {
+    public CompileFlags forSource(File file) {
+        final SingleSourceFileBucket entry = entries.computeIfAbsent(file, new Function<>() {
             @Override
-            public SingleSourceFileBucket apply(String __) {
+            public SingleSourceFileBucket apply(File __) {
                 final SingleSourceFileBucket result = objects.newInstance(SingleSourceFileBucket.class);
-                final FileCollection cppSource = DefaultCompileFlagsExtension.this.memoize(defaultSources.filter(byName(fileName)));
+                final FileCollection cppSource = DefaultCompileFlagsExtension.this.memoize(defaultSources.filter(file::equals));
                 result.getCppSourceFile().fileProvider(singleFile(cppSource));
                 DefaultCompileFlagsExtension.this.defaultSources = DefaultCompileFlagsExtension.this.memoize(defaultSources.minus(cppSource)).getAsFileTree();
                 DefaultCompileFlagsExtension.this.getSourceCompileFlags().add(result);
@@ -115,10 +115,6 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                     assert !iter.hasNext() : "expect only one file match";
                     return sourceFile;
                 });
-            }
-
-            private /*static*/ Spec<File> byName(String fileName) {
-                return it -> it.getName().equals(fileName);
             }
         });
         return entry.getAdditionalCompileFlags();

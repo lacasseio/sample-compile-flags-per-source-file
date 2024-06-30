@@ -11,8 +11,9 @@ plugins {
 application {
     targetMachines.add(machines.macOS.x86_64)
     compileFlags {
-        forSource { it.name == 'file1.cpp' }.add('-DMACRO_FILE1=1')
-        forSource { it.name == 'file2.cpp' }.add('-DMACRO_FILE2=1')
-        forSource { it.name == 'file3.cpp' }.add('-DMACRO_FILE3=1')
+        forSource(file('src/main/cpp/file1.cpp')).add('-DMACRO_FILE1=1')
+        forSource(file('src/main/cpp/file2.cpp')).add('-DMACRO_FILE2=1')
+        forSource(file('src/main/cpp/file3.cpp')).add('-DMACRO_FILE3=1')
+        forSource { it.name.startsWith('file') }.add('-DMACRO_FILES=1')
     }
 }
