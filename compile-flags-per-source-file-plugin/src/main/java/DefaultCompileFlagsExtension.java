@@ -95,7 +95,12 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     public CompileFlags forSource(File file) {
-        final SingleSourceFileBucket entry = entries.computeIfAbsent(file, new Function<>() {
+        final SingleSourceFileBucket entry = bucketFor(file);
+        return entry.getAdditionalCompileFlags();
+    }
+
+    private SingleSourceFileBucket bucketFor(File file) {
+        return entries.computeIfAbsent(file, new Function<>() {
             @Override
             public SingleSourceFileBucket apply(File __) {
                 final SingleSourceFileBucket result = objects.newInstance(SingleSourceFileBucket.class);
@@ -118,7 +123,6 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
                 });
             }
         });
-        return entry.getAdditionalCompileFlags();
     }
 
     public void finalizeExtension() {
