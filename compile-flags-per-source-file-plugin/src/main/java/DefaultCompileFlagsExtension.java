@@ -44,9 +44,9 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
     }
 
     private FileCollection memoize(FileCollection s) {
-        ConfigurableFileCollection result = objects.fileCollection().from(s);
-        result.finalizeValueOnRead();
-        return result;
+        SetProperty<FileSystemLocation> result = objects.setProperty(FileSystemLocation.class);
+        result.value(s.getElements()).finalizeValueOnRead();
+        return objects.fileCollection().from(result);
     }
 
     public abstract ConfigurableFileCollection getCppSource();
