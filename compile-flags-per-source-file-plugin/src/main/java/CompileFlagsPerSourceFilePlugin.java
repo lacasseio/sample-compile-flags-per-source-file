@@ -1,9 +1,11 @@
 import org.gradle.api.Action;
+import org.gradle.api.DomainObjectSet;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.Transformer;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.file.FileSystemLocation;
+import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.TaskProvider;
@@ -17,6 +19,7 @@ import org.gradle.nativeplatform.tasks.AbstractLinkTask;
 import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
 
+import javax.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,7 +43,9 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                 project.afterEvaluate(__ -> extension.finalizeExtension());
 
                 component.getBinaries().configureEach(binary -> {
+                    final DefaultCompileTasks compileTasks = ((ExtensionAware) binary).getExtensions().create("compileTasks", DefaultCompileTasks.class);
                     final TaskProvider<CppCompile> compileTask = project.getTasks().named(compileTaskName(binary), CppCompile.class);
+                    compileTasks.add(compileTask);
                     compileTask.configure(task -> {
                         task.getSource().setFrom(extension.getCppSource()); // Overwrite default sources
 
@@ -51,6 +56,7 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                         @Override
                         public void execute(DefaultCompileFlagsExtension.CompileFlagsBucket entry) {
                             final TaskProvider<CppCompile> sourceCompileTask = project.getTasks().register(compileTaskName(binary, entry.getName()), CppCompile.class);
+                            compileTasks.add(sourceCompileTask);
                             entry.getCompilationInformation().set(new CompileFlagsExtension.CompileInformation() {
                                 @Override
                                 public Provider<NativeToolChain> getToolChain() {
@@ -143,6 +149,39 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
 
     private static <T> Transformer<Provider<Set<FileSystemLocation>>, T> elementsOf(Transformer<? extends FileCollection, ? super T> mapper) {
         return it -> mapper.transform(it).getElements();
+    }
+
+    /*private*/ static abstract /*final*/ class DefaultCompileTasks implements CompileTasks {
+        private final DomainObjectSet<CompileTask> tasks;
+        private final ObjectFactory objects;
+
+        @Inject
+        public DefaultCompileTasks(ObjectFactory objects) {
+            this.tasks = objects.domainObjectSet(CompileTask.class);
+            this.objects = objects;
+        }
+
+        void add(TaskProvider<CppCompile> e) {
+            tasks.add(objects.newInstance(CompileTask.class, e));
+        }
+
+        @Override
+        public void configureEach(Action<? super CppCompile> action) {
+            tasks.all(it -> it.configure(action));
+        }
+
+        /*private*/ static abstract /*final*/ class CompileTask {
+            private final TaskProvider<CppCompile> provider;
+
+            @Inject
+            public CompileTask(TaskProvider<CppCompile> provider) {
+                this.provider = provider;
+            }
+
+            public void configure(Action<? super CppCompile> action) {
+                provider.configure(action);
+            }
+        }
     }
 
     //region Names

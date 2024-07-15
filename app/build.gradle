@@ -16,4 +16,10 @@ application {
         forSource(file('src/main/cpp/file3.cpp')).add('-DMACRO_FILE3=1')
         forSource { it.name.startsWith('file') }.add('-DMACRO_FILES=1')
     }
+
+    binaries.configureEach { binary ->
+        compileTasks.configureEach { task ->
+            // do something with each compile tasks
+        }
+    }
 }
