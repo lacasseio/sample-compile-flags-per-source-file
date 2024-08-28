@@ -8,6 +8,7 @@ import org.gradle.api.file.FileSystemLocation;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.provider.Provider;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.api.tasks.TaskProvider;
 import org.gradle.api.tasks.util.PatternFilterable;
 import org.gradle.language.cpp.CppBinary;
@@ -20,13 +21,22 @@ import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
 
 import javax.inject.Inject;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugin<Project> {
+    private final ProviderFactory providers;
+
+    @Inject
+    public CompileFlagsPerSourceFilePlugin(ProviderFactory providers) {
+        this.providers = providers;
+    }
+
     @Override
     public void apply(Project project) {
         project.getComponents().withType(CppComponent.class).configureEach(new Action<>() {
@@ -91,42 +101,58 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                         }
 
                         private Action<CppCompile> copyFrom(Provider<CppCompile> compileTask) {
-                            return task -> {
-                                task.getCompilerArgs().addAll(compileTask.flatMap(CppCompile::getCompilerArgs));
-                                // Do not lock as we allow additional flags
-
-                                task.getIncludes()
-                                        .from(compileTask.flatMap(elementsOf(CppCompile::getIncludes)))
-                                        .disallowChanges();
-                                task.getToolChain()
-                                        .value(compileTask.flatMap(CppCompile::getToolChain))
-                                        .disallowChanges();
-                                // Add macros as flag because CppCompile#macros is not a Gradle property.
-                                task.getCompilerArgs().addAll(task.getToolChain().zip(compileTask.flatMap(it -> project.provider(it::getMacros)), this::toMacroFlags));
-                                task.getSystemIncludes()
-                                        .from(compileTask.flatMap(elementsOf(CppCompile::getSystemIncludes)))
-                                        .disallowChanges();
-                                task.getTargetPlatform()
-                                        .value(compileTask.flatMap(CppCompile::getTargetPlatform))
-                                        .disallowChanges();
-                            };
-                        }
-
-                        private List<String> toMacroFlags(NativeToolChain toolChain, Map<String, String> macros) {
-                            return macros.entrySet().stream().map(it -> {
-                                final StringBuilder builder = new StringBuilder();
-
-                                if (toolChain instanceof VisualCpp)
-                                    builder.append("/D");
-                                else
-                                    builder.append("-D");
-
-                                builder.append(it.getKey());
-                                if (it.getValue() != null) {
-                                    builder.append("=").append(it.getValue());
+                            return new Action<>() {
+                                private /*static*/ <T> Callable<?> setProperty(Consumer<? super T> setter, Provider<T> provider) {
+                                    return () -> {
+                                        setter.accept(provider.get());
+                                        return Collections.emptyList();
+                                    };
                                 }
-                                return builder.toString();
-                            }).collect(Collectors.toList());
+
+                                @Override
+                                public void execute(CppCompile task) {
+                                    // Override those properties as late as possible
+                                    //  Note that a user won't be able to modify those values, however, we should be disallowing changes anyway.
+                                    task.dependsOn(setProperty(task::setDebuggable, compileTask.flatMap(it -> providers.provider(it::isDebuggable))));
+                                    task.dependsOn(setProperty(task::setOptimized, compileTask.flatMap(it -> providers.provider(it::isOptimized))));
+                                    task.dependsOn(setProperty(task::setPositionIndependentCode, compileTask.flatMap(it -> providers.provider(it::isPositionIndependentCode))));
+
+                                    task.getCompilerArgs().addAll(compileTask.flatMap(CppCompile::getCompilerArgs));
+                                    // Do not lock as we allow additional flags
+
+                                    task.getIncludes()
+                                            .from(compileTask.flatMap(elementsOf(CppCompile::getIncludes)))
+                                            .disallowChanges();
+                                    task.getToolChain()
+                                            .value(compileTask.flatMap(CppCompile::getToolChain))
+                                            .disallowChanges();
+                                    // Add macros as flag because CppCompile#macros is not a Gradle property.
+                                    task.getCompilerArgs().addAll(task.getToolChain().zip(compileTask.flatMap(it -> project.provider(it::getMacros)), this::toMacroFlags));
+                                    task.getSystemIncludes()
+                                            .from(compileTask.flatMap(elementsOf(CppCompile::getSystemIncludes)))
+                                            .disallowChanges();
+                                    task.getTargetPlatform()
+                                            .value(compileTask.flatMap(CppCompile::getTargetPlatform))
+                                            .disallowChanges();
+                                }
+
+                                private List<String> toMacroFlags(NativeToolChain toolChain, Map<String, String> macros) {
+                                    return macros.entrySet().stream().map(it -> {
+                                        final StringBuilder builder = new StringBuilder();
+
+                                        if (toolChain instanceof VisualCpp)
+                                            builder.append("/D");
+                                        else
+                                            builder.append("-D");
+
+                                        builder.append(it.getKey());
+                                        if (it.getValue() != null) {
+                                            builder.append("=").append(it.getValue());
+                                        }
+                                        return builder.toString();
+                                    }).collect(Collectors.toList());
+                                }
+                            };
                         }
                     });
                 });
