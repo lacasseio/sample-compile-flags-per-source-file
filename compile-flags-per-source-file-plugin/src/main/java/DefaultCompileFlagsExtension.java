@@ -132,6 +132,8 @@ abstract class DefaultCompileFlagsExtension implements CompileFlagsExtension {
         sourceSpecs.all(spec -> {
             final SourceSpecBucket result = objects.newInstance(SourceSpecBucket.class );
             final FileCollection cppSource = memoize(defaultSources.filter(spec.filterAction));
+            result.getAdditionalCompileFlags().addAll(spec.getAdditionalCompileFlags().toProvider());
+            spec.getAdditionalCompileFlags().compileInformation.set(result.getCompilationInformation());
             result.getCppSourceFiles().from(cppSource);
             this.defaultSources = memoize(defaultSources.minus(cppSource)).getAsFileTree();
             getSourceCompileFlags().add(result);
