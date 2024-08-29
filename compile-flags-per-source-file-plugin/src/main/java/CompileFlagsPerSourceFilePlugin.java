@@ -21,6 +21,7 @@ import org.gradle.nativeplatform.toolchain.NativeToolChain;
 import org.gradle.nativeplatform.toolchain.VisualCpp;
 
 import javax.inject.Inject;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -85,9 +86,12 @@ public /*final*/ abstract class CompileFlagsPerSourceFilePlugin implements Plugi
                                 task.getCompilerArgs().disallowChanges();
                                 task.getSource().from(entry.getCppSource()).disallowChanges();
 
-                                // We use the temporary directory to ensure the output directories are different
+                                // We assume the compileTask doesn't redirect objectFileDir
                                 task.getObjectFileDir()
-                                        .value(project.getLayout().getBuildDirectory().dir("tmp/" + task.getName()))
+                                        .value(compileTask.flatMap(it -> it.getObjectFileDir().getLocationOnly()).zip(project.getLayout().getBuildDirectory().dir("obj"), (a, b) -> {
+                                            final Path relativePath = b.getAsFile().toPath().relativize(a.getAsFile().toPath());
+                                            return b.dir(entry.getName() + "-" + relativePath);
+                                        }))
                                         .disallowChanges();
                             });
 
